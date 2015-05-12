@@ -123,9 +123,9 @@ HighResolutionTime::Timestamp Scheduler::update(HighResolutionTime::Timestamp ma
 
 void Scheduler::onStatusChanged(Task* task, Status from)
 {
-    // FIXME: Some tasks get lost during status changes
-    //        (probably from changing to running / waiting when they are not being executed)
-    //        Allow this to happen by checking for the currently executed task here explicitly.
+    // TODO: Some tasks get lost during status changes
+    //       (probably from changing to running / waiting when they are not being executed)
+    //       Allow this to happen by checking for the currently executed task here explicitly.
     if(from == StatusWaiting)
     {
         removeWaiting(task);
