@@ -512,7 +512,7 @@ RandomSequence::RandomSequence(Scheduler& scheduler,
     ;
 }
 
-RandomSelector::~RandomSequence()
+RandomSequence::~RandomSequence()
 {
     ;
 }
