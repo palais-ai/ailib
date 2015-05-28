@@ -271,7 +271,6 @@ private:
             AI_ASSERT(currentNode->connection < mGraph.getNumEdges(parentIdx),
                       "Parent node doesn't have enough children.");
 
-            fprintf(stderr, "%lf\n", (connectionsBegin + currentNode->connection)->cost);
             cost += (connectionsBegin + currentNode->connection)->cost;
 
             // Record the actual edges taken
@@ -284,7 +283,6 @@ private:
             // Move on to the next node in the chain.
             currentNode = currentNode->parent;
         }
-        fprintf(stderr, "total cost: %lf\n", cost);
 
         retVal.push_back(start);
 

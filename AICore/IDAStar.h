@@ -185,12 +185,14 @@ private:
                   childrenStack[depth].end(),
                   HeuristicComparator(mGraph, *goal, heuristic));
 
+        /*
         printf("children: [");
         for(size_t i = 0; i < numEdges; ++i)
         {
             printf("%lf, ", heuristic(*mGraph.getNode(childrenStack[depth][i]->targetIndex), *goal));
         }
         printf("]\n");
+        */
     }
 };
 
