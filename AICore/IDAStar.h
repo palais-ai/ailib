@@ -22,10 +22,34 @@ private:
     const GRAPH& mGraph;
 public:
     typedef typename GRAPH::node_type node_type;
+    typedef typename GRAPH::edge_type edge_type;
     typedef std::vector<const node_type*> path_type;
     typedef std::vector<Connection> connections_type;
     typedef real_type(*Heuristic)(const node_type&,
                                   const node_type&);
+private:
+    class HeuristicComparator
+    {
+        const GRAPH& mGraph;
+        const node_type& mGoal;
+        Heuristic mHeuristic;
+    public:
+        HeuristicComparator(const GRAPH& graph, const node_type& goal, Heuristic heuristic) :
+            mGraph(graph),
+            mGoal(goal),
+            mHeuristic(heuristic)
+        {
+            ;
+        }
+
+        FORCE_INLINE bool operator()(const edge_type* lv, const edge_type* rv) const
+        {
+            const node_type* left = mGraph.getNode(lv->targetIndex);
+            const node_type* right = mGraph.getNode(rv->targetIndex);
+            return mHeuristic(*left, mGoal) > mHeuristic(*right, mGoal); // Sort from worst to best.
+        }
+    };
+public:
 
     IDAStar(const GRAPH& graph) :
         mGraph(graph)
@@ -36,11 +60,12 @@ public:
     path_type findPath(const node_type* const start,
                        const node_type* const goal,
                        Heuristic heuristic,
-                       const uint32_t maxDepth,
+                       const int32_t maxDepth,
                        connections_type* /* out */ connections = NULL) const
     {
         AI_ASSERT(start, "Supplied a NULL start node.");
         AI_ASSERT(goal, "Supplied a NULL goal node.");
+        AI_ASSERT(maxDepth >= 0, "Maximum search depth must be a positive value.");
 
         if(maxDepth == 0)
         {
@@ -49,126 +74,123 @@ public:
             {
                 *connections = connections_type();
             }
-            return path_type;
+            return path_type();
         }
 
-        path_type retVal;
-        connections_type tmpConnections;
-        real_type estimate = heuristic(*start, *goal);
+        path_type nodeStack(maxDepth);
+        connections_type edgeStack(maxDepth);
+        std::vector< std::vector<const edge_type*> > childrenStack(maxDepth);
+        std::vector<real_type> costStack(maxDepth);
+        real_type nextEstimate = heuristic(*start, *goal);
+
         while(true)
         {
-            real_type newEstimate;
-            DepthSearchResult res = depthSearch(start,
-                                                goal,
-                                                retVal,
-                                                0, //< current cost
-                                                estimate,
-                                                heuristic,
-                                                1, // < depth
-                                                maxDepth,
-                                                newEstimate,
-                                                tmpConnections);
+            real_type estimate = nextEstimate;
+            nextEstimate = std::numeric_limits<real_type>::max();
+            int32_t depth = 0;
+            pushNode(nodeStack, edgeStack, childrenStack, costStack, goal, heuristic, depth, start);
 
-            if(res == DepthSearchResultFound)
+            while(depth >= 0)
             {
-                if(connections)
+                if(childrenStack[depth].empty())
                 {
-                    *connections = tmpConnections;
+                    // POP current top element, we don't actually need to do anything with the
+                    // stacks here, as they will be overwritten when necessary.
+                    depth--;
                 }
-                return retVal;
-            }
-            else if(res == DepthSearchResultUnreachable)
-            {
-                if(connections)
+                else
                 {
-                    *connections = connections_type();
-                }
-                return path_type();
-            }
+                    const edge_type* bestCandidate = childrenStack[depth].back();
+                    childrenStack[depth].pop_back();
 
-            estimate = newEstimate;
+                    const node_type* nextNode = mGraph.getNode(bestCandidate->targetIndex);
+
+                    const real_type costUntilNow = costStack[depth]*costStack[depth];
+                    const real_type heuristicValue = heuristic(*nextNode, *goal);
+
+                    real_type currentCost = costUntilNow + heuristicValue;
+                    if(currentCost <= estimate)
+                    {
+                        if(nextNode == goal)
+                        {
+                            if(connections)
+                            {
+                                *connections = connections_type(edgeStack.begin(),
+                                                                edgeStack.begin() + depth + 1);
+                            }
+                            nodeStack.resize(depth);
+                            return nodeStack;
+                        }
+
+                        if(depth + 1 < maxDepth)
+                        {
+                            depth++;
+                            pushNode(nodeStack,
+                                     edgeStack,
+                                     childrenStack,
+                                     costStack,
+                                     goal,
+                                     heuristic,
+                                     depth,
+                                     nextNode,
+                                     bestCandidate);
+                        }
+                    }
+                    else
+                    {
+                        nextEstimate = std::min(nextEstimate, currentCost);
+                    }
+                }
+            }
         }
     }
 private:
-    enum DepthSearchResult
+    void pushNode(path_type& nodeStack,
+                  connections_type& edgeStack,
+                  std::vector< std::vector<const edge_type*> >& childrenStack,
+                  std::vector<real_type>& costStack,
+                  const node_type* goal,
+                  Heuristic heuristic,
+                  uint32_t depth,
+                  const node_type* node,
+                  const edge_type* edge = NULL) const
     {
-        DepthSearchResultFound = 0,
-        DepthSearchResultUnreachable,
-        DepthSearchResultCost
-    };
-
-    DepthSearchResult depthSearch(const node_type* node,
-                                  const node_type* const goal,
-                                  path_type& currentPath,
-                                  real_type currentCost,
-                                  real_type currentEstimate,
-                                  Heuristic heuristic,
-                                  const uint32_t depth,
-                                  const uint32_t maxDepth,
-                                  real_type& /* out */ nextEstimate,
-                                  connections_type* /* out */ connections) const
-    {
-        real_type estimate = currentCost + heuristic(*node, *goal);
-        if(estimate > currentEstimate)
-        {
-            nextEstimate = estimate;
-            return DepthSearchResultCost;
-        }
-
-        if(node == goal)
-        {
-            currentPath.resize(depth);
-            connections->resize(depth - 1);
-            currentPath[depth - 1] = node;
-            return DepthSearchResultFound;
-        }
-
-        if(depth == maxDepth)
-        {
-            return DepthSearchResultUnreachable;
-        }
+        nodeStack[depth] = node;
 
         const node_type* const firstNode = mGraph.getNodesBegin();
-        const size_t nodeIdx = node - firstNode;
-        AI_ASSERT(nodeIdx < mGraph.getNumNodes(),
-                  "The nodes are not in continguous memory.");
-
-        real_type min = std::numeric_limits<real_type>::max();
-        const Edge* const end = mGraph.getSuccessorsEnd(nodeIdx);
-        for(const Edge* it = mGraph.getSuccessorsBegin(nodeIdx); it != end; ++it)
+        const size_t index = node - firstNode;
+        if(depth > 0)
         {
-            real_type tmp = std::numeric_limits<real_type>::max();
-            DepthSearchResult res = depthSearch(mGraph.getNode(it->targetIndex),
-                                                goal,
-                                                currentPath,
-                                                currentCost + it->cost,
-                                                currentEstimate,
-                                                heuristic,
-                                                depth + 1,
-                                                maxDepth,
-                                                tmp,
-                                                connections);
-
-            if(res == DepthSearchResultFound)
-            {
-                (*connections)[depth - 1] = Connection::makeConnection(nodeIdx, it - begin);
-                return DepthSearchResultFound;
-            }
-            else if(tmp < min)
-            {
-                min = tmp;
-            }
-        }
-
-        if(min == std::numeric_limits<real_type>::max())
-        {
-            return DepthSearchResultUnreachable;
+            AI_ASSERT(edge != NULL,
+                      "Must specify the edge taken to get to the next node.");
+            edgeStack[depth] = Connection::makeConnection(index, edge->targetIndex);
+            costStack[depth] = costStack[depth-1] + edge->cost;
         }
         else
         {
-            nextEstimate = min;
-            return DepthSearchResultCost;
+            costStack[depth] = 0;
         }
+
+        const edge_type* const begin = mGraph.getSuccessorsBegin(index);
+        const edge_type* const end = mGraph.getSuccessorsEnd(index);
+        const size_t numEdges = end - begin;
+        childrenStack[depth] = std::vector<const edge_type*>(numEdges);
+
+        for(size_t i = 0; i < numEdges; ++i)
+        {
+            childrenStack[depth][i] = (begin + i);
+        }
+
+        std::sort(childrenStack[depth].begin(),
+                  childrenStack[depth].end(),
+                  HeuristicComparator(mGraph, *goal, heuristic));
+
+        printf("children: [");
+        for(size_t i = 0; i < numEdges; ++i)
+        {
+            printf("%lf, ", heuristic(*mGraph.getNode(childrenStack[depth][i]->targetIndex), *goal));
+        }
+        printf("]\n");
     }
 };
 

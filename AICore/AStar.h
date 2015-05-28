@@ -200,7 +200,6 @@ private:
             real_type heuristicValue = 0.;
 
             AStarNode* targetNode = &mNodeInfo[targetIdx];
-
             if(targetNode->state == AStarNode::NodeStateUnvisited)
             {
                 const node_type* target = mGraph.getNode(targetIdx);
@@ -249,6 +248,7 @@ private:
 
         path_type retVal;
 
+        real_type cost = 0;
         const AStarNode* currentNode = fromNode;
         while(currentNode != startNode)
         {
@@ -257,18 +257,34 @@ private:
                       "The nodes are not in continguous memory.");
 
             const node_type* current = mGraph.getNode(currentIdx);
-            retVal.push_back(current);
-            currentNode = currentNode->parent;
 
+            // Add this node to the path
+            retVal.push_back(current);
+
+            const size_t parentIdx = currentNode->parent - firstNodeInfo;
+            AI_ASSERT(parentIdx < mGraph.getNumNodes(),
+                      "The nodes are not in continguous memory.");
+
+            // Find the path that was taken to calculate the path cost
+            const edge_type* const connectionsBegin = mGraph.getSuccessorsBegin(parentIdx);
+            AI_ASSERT(connectionsBegin, "Parent node has no children.");
+            AI_ASSERT(currentNode->connection < mGraph.getNumEdges(parentIdx),
+                      "Parent node doesn't have enough children.");
+
+            fprintf(stderr, "%lf\n", (connectionsBegin + currentNode->connection)->cost);
+            cost += (connectionsBegin + currentNode->connection)->cost;
+
+            // Record the actual edges taken
             if(connections)
             {
-                const size_t parentIdx = currentNode - firstNodeInfo;
-                AI_ASSERT(parentIdx < mGraph.getNumNodes(),
-                          "The nodes are not in continguous memory.");
                 connections->push_back(Connection::makeConnection(parentIdx,
                                                                   currentNode->connection));
             }
+
+            // Move on to the next node in the chain.
+            currentNode = currentNode->parent;
         }
+        fprintf(stderr, "total cost: %lf\n", cost);
 
         retVal.push_back(start);
 

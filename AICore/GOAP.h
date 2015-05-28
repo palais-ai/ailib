@@ -32,7 +32,7 @@ public:
     typedef STATE state_type;
     typedef Action<state_type> action_type;
     typedef Graph<state_type, MAX_ACTIONS, UserDataEdge<action_type> > graph_type;
-    typedef google::sparse_hash_map<STATE, uint16_t, HASH_FUN> hash_type;
+    typedef google::sparse_hash_map<STATE, real_type, HASH_FUN> hash_type;
 
     GOAPPlanner()
     {
@@ -55,14 +55,15 @@ public:
         mHashTable.clear();
         mGraph = graph_type(); //< Clear before build.
         size_t startIdx = mGraph.addNode(startState);
-        recursiveBuildGraph(startIdx, maxDepth, 0);
+        recursiveBuildGraph(startIdx, maxDepth, 0, 0);
         return startIdx;
     }
 
 private:
     void recursiveBuildGraph(size_t currentIdx,
                              uint16_t maxDepth,
-                             uint16_t currentDepth)
+                             uint16_t currentDepth,
+                             real_type currentCost)
     {
         const state_type currentState = *mGraph.getNode(currentIdx);
 
@@ -77,20 +78,23 @@ private:
                 action->applyPostcondition(nextState);
 
                 const size_t nextIdx = mGraph.addNode(nextState);
-                mGraph.addEdge(currentIdx, nextIdx, action->getCost(currentState), action);
+                const real_type actionCost = action->getCost(currentState);
+                mGraph.addEdge(currentIdx, nextIdx, actionCost, action);
+
+                const real_type totalCost = currentCost + actionCost;
 
                 // Check if this exact state has been processed before.
                 typename hash_type::iterator it = mHashTable.find(nextState);
                 if(it == mHashTable.end())
                 {
                     // Store this world state to avoid re-processing it.
-                    mHashTable[nextState] = currentDepth;
+                    mHashTable[nextState] = totalCost;
                 }
                 else
                 {
-                    if(currentDepth < (*it).second)
+                    if(totalCost < (*it).second)
                     {
-                        (*it).second = currentDepth;
+                        (*it).second = totalCost;
                     }
                     else
                     {
@@ -101,7 +105,10 @@ private:
 
                 if(currentDepth < maxDepth)
                 {
-                    recursiveBuildGraph(nextIdx, maxDepth, currentDepth + 1);
+                    recursiveBuildGraph(nextIdx,
+                                        maxDepth,
+                                        currentDepth + 1,
+                                        totalCost);
                 }
             }
         }

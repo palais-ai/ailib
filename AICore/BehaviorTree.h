@@ -169,7 +169,7 @@ void shuffle(ITER start, ITER end)
     for(int32_t i = end - start - 1; i > 0; --i)
     {
         // The rand() use can be made deterministic by calling srand() with the same seed on startup.
-        const uint32_t j = rand() % i;
+        const uint32_t j = rand() % (i + 1);
         typedef typename std::iterator_traits<ITER>::value_type ValueType;
         ValueType tmp = *(start + i);
         *(start + i) = *(start + j);
