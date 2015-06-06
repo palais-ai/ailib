@@ -1,54 +1,59 @@
 #include "Steering.h"
 
-btVector3 search(const btVector3& position,
-                 const btVector3& target,
-                 const btVector3& currentVelocity,
-                 btScalar maxVelocity)
+BEGIN_NS_AILIB
+
+btVector3 Steering::search(const btVector3& position,
+                           const btVector3& target,
+                           btScalar maxVelocity)
 {
-    return (target - position).normalized() * maxVelocity - currentVelocity;
+    return (target - position).normalized() * maxVelocity;
 }
 
-btVector3 flee(const btVector3& position,
-               const btVector3& target,
-               const btVector3& currentVelocity,
-               btScalar maxVelocity)
+btVector3 Steering::flee(const btVector3& position,
+                         const btVector3& target,
+                         btScalar maxVelocity)
 {
-    return (position - target).normalized() * maxVelocity - currentVelocity;
+    return (position - target).normalized() * maxVelocity;
 }
 
-btVector3 pursuit(const btVector3& position,
-                  const btVector3& target,
-                  const btVector3& currentVelocity,
-                  const btVector3& targetVelocity,
-                  btScalar lookaheadTime,
-                  btScalar maxVelocity)
+btVector3 Steering::pursuit(const btVector3& position,
+                            const btVector3& target,
+                            const btVector3& targetVelocity,
+                            btScalar lookaheadTime,
+                            btScalar maxVelocity)
 {
-    return search(position, target + targetVelocity * lookaheadTime, currentVelocity, maxVelocity);
+    return search(position, target + targetVelocity * lookaheadTime, maxVelocity);
 }
 
-btVector3 evade(const btVector3& position,
-                const btVector3& target,
-                const btVector3& currentVelocity,
-                const btVector3& targetVelocity,
-                btScalar lookaheadTime,
-                btScalar maxVelocity)
+btVector3 Steering::evade(const btVector3& position,
+                          const btVector3& target,
+                          const btVector3& targetVelocity,
+                          btScalar lookaheadTime,
+                          btScalar maxVelocity)
 {
-    return flee(position, target + targetVelocity * lookaheadTime, currentVelocity, maxVelocity);
+    return flee(position, target + targetVelocity * lookaheadTime, maxVelocity);
 }
 
-
-
-btVector3 followPath(const btVector3& segmentStart,
-                     const btVector3& segmentEnd,
-                     const btVector3& position,
-                     const btVector3& currentVelocity,
-                     btScalar lookaheadTime,
-                     btScalar maxVelocity)
+btVector3 Steering::avoidObstacle(const btVector3& position,
+                                  const btVector3& currentVelocity,
+                                  btScalar maxVelocity,
+                                  btScalar lookaheadTime,
+                                  RaycastFunction fun)
 {
-    return btVector3();
+    RaycastResult res = fun(position, position + currentVelocity * lookaheadTime);
+
+    if(res.hasHit)
+    {
+        btVector3 hitPoint = position + currentVelocity * res.distance;
+        btScalar currentSpeed = currentVelocity.length();
+        if(position.distance(hitPoint) / currentSpeed < lookaheadTime)
+        {
+            btVector3 searchPoint(hitPoint.x() + lookaheadTime, hitPoint.y(), hitPoint.z());
+            return search(position, searchPoint, maxVelocity);
+        }
+    }
+
+    return btVector3(0,0,0);
 }
 
-btVector3 avoidObstacle()
-{
-    return btVector3();
-}
+END_NS_AILIB

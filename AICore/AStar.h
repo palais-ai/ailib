@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ai_global.h"
-#include "graph.h"
+#include "Graph.h"
 #include <cstring>
 #include <algorithm>
 #include <queue>
@@ -92,6 +92,11 @@ public:
         ;
     }
 
+    virtual ~AStar()
+    {
+        ;
+    }
+
     FORCE_INLINE path_type findPath(const node_type* const start,
                                     const node_type& goal,
                                     Comparator comparator = &equalsComparator,
@@ -125,12 +130,34 @@ public:
     {
         AI_ASSERT(start, "Supplied a NULL start node.");
 
+        OpenList open;
+        const size_t startIdx = initialise(start, goal, heuristic, open);
+        while(LIKELY(!open.empty()))
+        {
+            if(step(goal, heuristic, comparator, open))
+            {
+                AStarNode* lowestCostNode = open.top();
+
+                // We found a valid short path.
+                // It's guaranteed to be the shortest, if our heuristic is underestimating.
+                return buildPath(lowestCostNode, startIdx, connections);
+            }
+        }
+
+        // No solution found. Return an empty path.
+        return path_type();
+    }
+
+protected:
+    size_t initialise(const node_type* const start,
+                      const node_type& goal,
+                      Heuristic heuristic,
+                      OpenList& open) const
+    {
         // Make sure there is enough space in the node cache to handle all nodes.
         // This is necessary if the graph has changed its size in between construction
         // and this path query.
         mNodeInfo.reserve(mGraph.getNumNodes());
-
-        OpenList open;
 
         // Zero-initialize the bookkeeping information
         std::memset(&mNodeInfo[0],
@@ -138,7 +165,6 @@ public:
                     mNodeInfo.size() * sizeof(AStarNode));
 
         const node_type* const firstNode = mGraph.getNodesBegin();
-        const AStarNode* const firstNodeInfo = &mNodeInfo[0];
 
         const size_t startIdx = start - firstNode;
         AI_ASSERT(startIdx < mGraph.getNumNodes(),
@@ -148,40 +174,44 @@ public:
         AStarNode* startNode = &mNodeInfo[startIdx];
         startNode->estTotalCost = heuristic(*start, goal);
         startNode->state = AStarNode::NodeStateOpen;
+
         open.push(startNode);
 
-        while(LIKELY(!open.empty()))
-        {
-            AStarNode* lowestCostNode = open.top();
-
-            const size_t lowestCostIdx = lowestCostNode - firstNodeInfo;
-            AI_ASSERT(lowestCostIdx < mGraph.getNumNodes(),
-                   "The nodes are not in continguous memory.");
-
-            const node_type* lowestCost = mGraph.getNode(lowestCostIdx);
-            if(UNLIKELY(comparator(*lowestCost, goal)))
-            {
-                // We found a valid short path.
-                // It's guaranteed to be the shortest, if our heuristic is underestimating.
-                return buildPath(lowestCostNode, startIdx, connections);
-            }
-
-            lowestCostNode->state = AStarNode::NodeStateClosed;
-
-            // The lowest cost node is going to be processed and removed from the open list.
-            // We have to remove it before adding any children in case they have
-            // a better cost value.
-            open.pop();
-
-            // Expand all child nodes of the current node.
-            expand(lowestCostNode, goal, heuristic, lowestCostIdx, open);
-        }
-
-        // No solution found. Return an empty path.
-        return path_type();
+        return startIdx;
     }
 
-private:
+    // Returns true if the top node is the goal node.
+    bool step(const node_type& goal,
+              Heuristic heuristic,
+              Comparator comparator,
+              OpenList& open) const
+    {
+        const AStarNode* const firstNodeInfo = &mNodeInfo[0];
+
+        AStarNode* lowestCostNode = open.top();
+
+        const size_t lowestCostIdx = lowestCostNode - firstNodeInfo;
+        AI_ASSERT(lowestCostIdx < mGraph.getNumNodes(),
+               "The nodes are not in continguous memory.");
+
+        const node_type* lowestCost = mGraph.getNode(lowestCostIdx);
+        if(UNLIKELY(comparator(*lowestCost, goal)))
+        {
+            return true;
+        }
+
+        lowestCostNode->state = AStarNode::NodeStateClosed;
+
+        // The lowest cost node is going to be processed and removed from the open list.
+        // We have to remove it before adding any children in case they have
+        // a better cost value.
+        open.pop();
+
+        // Expand all child nodes of the current node.
+        expand(lowestCostNode, goal, heuristic, lowestCostIdx, open);
+        return false;
+    }
+
     void expand(AStarNode* node,
                 const node_type& goal,
                 Heuristic heuristic,

@@ -44,7 +44,7 @@ private:
 
         FORCE_INLINE bool operator()(const edge_type* lv, const edge_type* rv) const
         {
-            const node_type* left = mGraph.getNode(lv->targetIndex);
+            const node_type* left  = mGraph.getNode(lv->targetIndex);
             const node_type* right = mGraph.getNode(rv->targetIndex);
             return mHeuristic(*left, mGoal) > mHeuristic(*right, mGoal); // Sort from worst to best.
         }
@@ -184,15 +184,6 @@ private:
         std::sort(childrenStack[depth].begin(),
                   childrenStack[depth].end(),
                   HeuristicComparator(mGraph, *goal, heuristic));
-
-        /*
-        printf("children: [");
-        for(size_t i = 0; i < numEdges; ++i)
-        {
-            printf("%lf, ", heuristic(*mGraph.getNode(childrenStack[depth][i]->targetIndex), *goal));
-        }
-        printf("]\n");
-        */
     }
 };
 

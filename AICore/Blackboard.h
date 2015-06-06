@@ -125,6 +125,7 @@ public:
     }
 
 private:
+    // TODO: Use sparse hashmap instead.
     btHashMap<KEY, ailib::hold_any> mKnowledge;
     BlackboardListeners mListeners;
     uint32_t mCount;

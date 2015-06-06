@@ -41,7 +41,8 @@ HEADERS +=\
     Task.h \
     HighResolutionTime.h \
     Steering.h \
-    Genetic.h
+    Genetic.h \
+    AStarTask.h
 
 CONFIG(release, debug|release) {
     M_BUILD_DIR = release

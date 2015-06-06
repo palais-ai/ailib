@@ -37,6 +37,7 @@ private:
 
     class FitnessComparator
     {
+        // TODO: Add a HashingPolicy template type parameter.
         //mutable hash_type mHashMap;
         FitnessFunction mFitness;
     public:
@@ -64,7 +65,7 @@ private:
 
         FORCE_INLINE bool operator()(const T& lv, const T& rv) const
         {
-            return getFitnessForValue(lv) < getFitnessForValue(rv); // Sort from best to worst.
+            return getFitnessForValue(lv) < getFitnessForValue(rv); // Sort from lowest to highest
         }
     };
 public:
@@ -76,6 +77,7 @@ public:
             uint32_t populationSize) :
         mListener(NULL),
         mPopulation(populationSize),
+        mBacking(populationSize),
         mFitness(ff),
         mCrossover(cf),
         mMutation(mf),
@@ -103,9 +105,45 @@ public:
                real_type pMutation)
     {
         FitnessComparator comp(mFitness);
+        // A full sort is not completely necessary.
+        // An alternative strategy is to pick out a few chromosomes and keep the best ones.
+        std::sort(mPopulation.begin(),
+                  mPopulation.end(),
+                  comp);
+
+        if(mListener)
+        {
+            mListener->onGeneration(0, mFitness(mPopulation[0]));
+        }
+
         for(size_t gens = 0; gens < numGenerations; ++gens)
         {
-            // A full sort is not necessary, we could just pick out a few and take the best of those
+            // Update the shadow copy
+            std::copy(mPopulation.begin(),
+                      mPopulation.end(),
+                      mBacking.begin());
+
+            const uint32_t numElitists = pElitism * mPopulation.size();
+            for(int64_t i = mPopulation.size() - 1; i > mPopulation.size() * pCrossover; --i)
+            {
+                uint32_t first = randRangeExp(numElitists, mPopulation.size() - 1, 0.4);
+                uint32_t second = 0;
+                do
+                {
+                    second = randRangeExp(0, mPopulation.size(), 0.4);
+                } while(first == second);
+
+                mPopulation[i] = mCrossover(mBacking[first], mBacking[second]);
+            }
+
+            for(size_t i = 0; i < mPopulation.size() * pMutation; ++i)
+            {
+                uint32_t toMutate = randRangeExp(numElitists, mPopulation.size() - 1, 0.4);
+                uint32_t mutated  = mPopulation.size() - 1 -
+                                    randRangeExp(0, mPopulation.size() - 1, 0.4);
+                mPopulation[toMutate] = mMutation(mBacking[mutated]);
+            }
+
             std::sort(mPopulation.begin(),
                       mPopulation.end(),
                       comp);
@@ -114,36 +152,43 @@ public:
             {
                 mListener->onGeneration(gens+1, mFitness(mPopulation[0]));
             }
-
-            const uint32_t numElitists = pElitism * mPopulation.size();
-            for(size_t i = 0; i < mPopulation.size() * pCrossover; ++i)
-            {
-                uint32_t first = randRange(numElitists, mPopulation.size());
-                uint32_t second = 0;
-                do
-                {
-                    second = randRange(numElitists, mPopulation.size());
-                } while(first == second);
-
-                mPopulation[first] = mCrossover(mPopulation[first], mPopulation[second]);
-            }
-
-            for(size_t i = 0; i < mPopulation.size() * pMutation; ++i)
-            {
-                uint32_t toMutate = randRange(numElitists, mPopulation.size());
-                mPopulation[toMutate] = mMutation(mPopulation[toMutate]);
-            }
         }
         return mPopulation[0];
     }
 
 private:
-    FORCE_INLINE uint32_t randRange(uint32_t low, uint32_t high)
+    /**
+     * Returns a random number between 0.0 and 1.0.
+     * Uses __rand()__ - seed with __srand()__ to be able to reproduce results.
+     */
+    FORCE_INLINE real_type randNum() const
     {
-        return low + static_cast<float>(rand()) / static_cast<float>(RAND_MAX / (high - low));
+        return static_cast<float>(rand()) / RAND_MAX;
     }
 
-    std::vector<T> mPopulation;
+    /**
+      Calculates a random integer within the range of low and high (inclusive).
+      Uniformly distributed.
+      */
+    FORCE_INLINE uint32_t randRange(uint32_t low, uint32_t high) const
+    {
+        return low + randNum() * (high - low);
+    }
+
+    /**
+      Calculates a random integer within the range of low and high (inclusive).
+      Exponentially distributed with a parameter mu.
+      */
+    uint32_t randRangeExp(uint32_t low, uint32_t high, real_type mu) const
+    {
+        const real_type lowExp = expf(-mu*low);
+        const real_type val = (-1./mu) * logf( lowExp - randNum() * (lowExp - expf(-mu*high)) );
+        const uint32_t retVal = floorf(val + 0.5);
+        AI_ASSERT(retVal >= low && retVal <= high, "Must be in valid range.");
+        return retVal;
+    }
+
+    std::vector<T> mPopulation, mBacking;
     FitnessFunction mFitness;
     CrossoverFunction mCrossover;
     MutationFunction mMutation;
